@@ -1,0 +1,157 @@
+/*
+ * Copyright (c) 2012-2016 Jeffrey L. Eppinger.  All Rights Reserved.
+ *     You may use, modify and share this code for non-commercial purposes
+ *     as long a you comply with this license from Creative Commons:
+ *     Summary of license: http://creativecommons.org/licenses/by-nc-sa/3.0
+ *     Full Text of License: http://creativecommons.org/licenses/by-nc-sa/3.0/legalcode
+ *     Specifically, if you distribute your code for non-educational purposes,
+ *     you must include this copyright notice in your work.
+ *     If you wish to have broader rights, you must contact the copyright holder.
+ */
+package com.github.idelstak.genericdao;
+
+import java.io.OutputStream;
+
+import com.github.idelstak.genericdao.impl.MyPrintWriter;
+import com.github.idelstak.genericdao.impl.TranImpl;
+
+/**
+ * This class is used to begin and end transactions.
+ *
+ * Transactions are associated with threads. When
+ * <code>Transaction.begin()</code> is called a new transaction is started for
+ * the current thread. To successfully complete a transaction and save its work,
+ * call <code>Transaction.commit()</code>. To undo a transaction's work call
+ * <code>Transaction.rollback()</code>.
+ * <p>
+ * All DAO methods that perform their work on behalf of a transaction should
+ * throw <code>RollbackException</code> if there is a problem performing the
+ * work. By convention, the current thread's transaction is rolled back before
+ * (or in the process of) throwing <code>RollbackException</code>. The reason
+ * for rolling back the transaction is described in the message. Should the
+ * transaction have been rolled back due to some underlying exception,
+ * <code>RollbackException</code> will be thrown as a chained exception with the
+ * underlying exception as its cause.
+ * <p>
+ * Because transactions can hold locks in the underlying database, it is
+ * recommended that user interactions not occur during a transaction. For
+ * similar reasons, a method that begins a transaction should ensure that all
+ * avenues of departure from the method either commit or roll back the
+ * transaction This is typically handled using : <blockquote>
+ * 
+ * <pre>
+ *     try {
+ *         Transaction.begin();
+ *         // Application logic, including CRUD calls
+ *         Transaction.commit();
+ *     } catch (...) {
+ *         ...
+ *     } finally {
+ *         if (Transaction.isActive()) Transaction.rollback();
+ *     }
+ * </pre>
+ * 
+ * </blockquote>
+ * <p>
+ * Transactions cannot be nested. In other words, calling
+ * <tt>Transaction.begin()</tt> when a transaction is already active in a thread
+ * will throw <tt>RollbackException</tt>.
+ * <p>
+ * To write a method that starts a new transaction, unless one is already
+ * active, use recursion: <blockquote>
+ * 
+ * <pre>
+ * public void exampleSpecialDAOMethod(B bean) throws RollbackException {
+ *     if (!Transaction.isActive()) {
+ *         try {
+ *             Transaction.begin();
+ *             exampleSpecialDAOMethod(bean);
+ *             Transaction.commit();
+ *             return;
+ *         } finally {
+ *             if (Transaction.isActive())
+ *                 Transaction.rollback();
+ *         }
+ *     }
+ * 
+ *     // Application logic, including CRUD calls
+ * }
+ * </pre>
+ * 
+ * </blockquote>
+ *
+ */
+public class Transaction {
+
+    /**
+     * Private constructor to prevent instantiation
+     */
+    private Transaction() {
+    }
+
+    /**
+     * Begins a new transaction for this thread.
+     * 
+     * @throws RollbackException
+     *             if there is some reason the transaction could not be started.
+     *             One reason is if you are already in a transaction.
+     */
+    public static void begin() throws RollbackException {
+        TranImpl.begin();
+    }
+
+    /**
+     * Commits the work performed by this thread's currently running
+     * transaction.
+     * 
+     * @throws RollbackException
+     *             if there is some reason the transaction could not be
+     *             committed.
+     */
+    public static void commit() throws RollbackException {
+        TranImpl.commit();
+    }
+
+    /**
+     * Tests whether a transaction is currently running for this thread.
+     * 
+     * @return true if this thread is in a transaction.
+     */
+    public static boolean isActive() {
+        return TranImpl.isActive();
+    }
+
+    /**
+     * Causes the work performed by the current thread's currently running
+     * transaction to be undone.
+     * 
+     * @throws AssertionError
+     *             if not in a transaction.
+     */
+    public static void rollback() {
+        TranImpl.rollback();
+    }
+
+    /**
+     * Sets an <tt>OutputStream</tt> to which debugging output will be printed
+     * for the current transaction. This method must be call when in a
+     * transaction (i.e., after <tt>Transaction.begin()</tt>). These messages
+     * are usually the SQL generated by the GenericDAO. By default, printing of
+     * debugging messages is inherited from the connection pool involved in the
+     * transaction. To override that default on a particular transaction, use
+     * this call (or <tt>setDebugWriter</tt>). This method is a convenience
+     * method which just calls <tt>setDebugWriter</tt>. It is provided to make
+     * it easy to direct debugging messages to <tt>System.out</tt>.
+     * 
+     * @param out
+     *            an OutputStream to which debugging messages will be printed or
+     *            <tt>null</tt> to turn off printing of debug messages.
+     */
+    public static void setDebugOutput(OutputStream out) {
+        if (out == null) {
+            TranImpl.setDebugWriter(null);
+        } else {
+            TranImpl.setDebugWriter(new MyPrintWriter(out));
+        }
+    }
+}
